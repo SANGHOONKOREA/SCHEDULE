@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- 제목 변경 -->
+  <title>S&SYS SERVICE MANAGEMENT</title>
+<link rel="stylesheet" href="style.css?v=1.0.5">
+  
+  <!-- EmailJS SDK (클라이언트 사이드) -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  <script type="text/javascript">
+    (function(){
+      emailjs.init("NOmE935NJtC5OJy49"); // 실제 Public Key로 대체
+    })();
+  </script>
+</head>
+<body>
+  <header>
+    <!-- 헤더 제목 변경 -->
+    <h1>S&SYS SERVICE MANAGEMENT</h1>
+  </header>
+
+  <div id="container">
+    <!-- (A) 로그인 화면 -->
+    <div id="login-container">
+      <div style="text-align:center; margin-bottom:10px;">
+        <img src="https://media.licdn.com/dms/image/v2/C4E0BAQGQyZvSSEAV1Q/company-logo_200_200/company-logo_200_200/0/1630615026721?e=2147483647&v=beta&t=w_YW_KTfyfsmEyqVX7D69MStbrfMEIjYBII16M32JuA" alt="S&SYS 로고" style="max-width:120px;">
+      </div>
+      <h2>로그인</h2>
+      <div class="login-form">
+        <label>이메일</label>
+        <input type="text" id="loginEmail" placeholder="예: user@example.com"/>
+        <label>비밀번호</label>
+        <input type="password" id="loginPw" placeholder="********" onkeydown="if(event.key==='Enter'){ login(); }"/>
+        <button onclick="login()">로그인</button>
+        <button class="reset-pw" onclick="resetPassword()">비밀번호 변경</button>
+      </div>
+    </div>
+
+    <!-- (B) 메인 메뉴 (로그인 후) -->
+<nav id="main-menu">
+  <button id="btnMonthly" onclick="showSection('monthly')">월간 달력</button>
+  <button id="btnWeekly" onclick="showSection('weekly')">주간 달력</button>
+  <!-- 본사 권한일 경우 현황 버튼 표시 -->
+  <button id="btnStatus" onclick="showSection('status')" style="display:none;">현황</button>
+  <!-- 관리자만 보이게 -->
+  <button id="btnAdmin" onclick="showSection('admin')" style="display:none;">관리자 페이지</button>
+  <button onclick="window.open('https://snsys-qa.neoali.com/', '_blank')" style="background:#87CEEB; color:#fff;">AI 서비스</button>
+</nav>
+
+
+    <!-- (C) 월간 달력 -->
+    <section id="monthlySection">
+      <div class="month-controls">
+        <button onclick="prevMonth()">&lt; 이전달</button>
+        <span id="monthLabel"></span>
+        <button onclick="nextMonth()">다음달 &gt;</button>
+      </div>
+<div id="monthCompanyFilterContainer" style="margin-bottom:8px; display:flex; gap:4px; align-items:center;">
+  <div class="filter-field">
+    <label for="monthCompanyFilter">업체:</label>
+    <select id="monthCompanyFilter" onchange="refreshCalendar()">
+      <option value="">전체</option>
+    </select>
+  </div>
+  <div class="filter-field">
+    <label for="monthManagerFilter">담당:</label>
+    <select id="monthManagerFilter" onchange="refreshCalendar()">
+      <option value="">전체</option>
+    </select>
+  </div>
+  <div class="filter-field">
+    <label for="monthShipFilter">선박:</label>
+    <input type="text" id="monthShipFilter" placeholder="선박명 입력..." oninput="filterShipNameDropdown()">
+  </div>
+</div>
+<div id="shipDropdownContainer" style="display: none;">
+  <ul id="shipDropdown" style="list-style: none; margin: 0; padding: 0; border: 1px solid #ccc; max-height: 150px; overflow-y: auto;"></ul>
+</div>
+
+
+<div id="shipScheduleModal" style="display: none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); z-index: 1000;">
+  <div class="modal" id="shipScheduleModalContent" style="max-width: 500px; margin: 50px auto;">
+    <button class="modal-close" onclick="closeShipScheduleModal()">×</button>
+    <h3>선박 스케쥴 목록</h3>
+    <div id="shipScheduleListContainer">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Ship Name</th>
+            <th>Hull No.</th>
+            <th>엔지니어</th>
+            <th>본사 담당자</th>
+            <th>시작일</th>
+            <th>종료일</th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody id="shipScheduleListBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+
+      <div style="position:relative;">
+        <table class="month-table">
+          <thead>
+            <tr>
+              <th>일</th>
+              <th>월</th>
+              <th>화</th>
+              <th>수</th>
+              <th>목</th>
+              <th>금</th>
+              <th>토</th>
+            </tr>
+          </thead>
+          <tbody id="monthBody"></tbody>
+        </table>
+        <div id="monthOverlay"></div>
+      </div>
+      <div style="text-align:right; padding:4px;">
+        <input type="checkbox" id="excludeSchedules" onchange="refreshCalendar()">
+        <label for="excludeSchedules">서비스 불가/취소 일정 제외</label>
+      </div>
+    </section>
+
+
+
+
+
+
+    <!-- (D) 주간 달력 -->
+    <section id="weeklySection">
+      <div class="week-controls">
+        <button onclick="prevWeek()">&lt; 이전주</button>
+        <span id="weekLabel"></span>
+        <button onclick="nextWeek()">다음주 &gt;</button>
+      </div>
+<!-- 주간 달력: 업체별 필터 추가 -->
+<div id="weekCompanyFilterContainer" style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+  <label for="weekCompanyFilter">업체: </label>
+  <select id="weekCompanyFilter" onchange="refreshCalendar()">
+    <option value="">전체</option>
+  </select>
+  
+  <!-- 담당자 필터 추가 -->
+  <label for="weekManagerFilter">담당: </label>
+  <select id="weekManagerFilter" onchange="refreshCalendar()">
+    <option value="">전체</option>
+  </select>
+</div>
+
+      <div id="weekList" class="week-list"></div>
+    </section>
+
+<!-- (E) 본사 전용 현황 섹션 -->
+<section id="statusSection">
+  <!-- 현황 메뉴 버튼 -->
+  <div id="status-menu" style="display: flex; gap: 8px; margin-bottom: 10px;">
+    <button id="btnStatusUser" onclick="showStatusPane('user')">유저 목록</button>
+    <button id="btnStatusSchedule" onclick="showStatusPane('schedule')">스케줄 목록</button>
+    <button id="btnStatusHistory" onclick="showStatusPane('history')">변경 히스토리</button>
+  </div>
+  <!-- 유저 목록 판 (읽기 전용, 필터 포함) -->
+  <div id="statusUserPane" class="status-pane" style="display:none;">
+    <div style="margin-bottom:10px;">
+      <label for="statusUserCompanyFilter">업체별 필터: </label>
+      <select id="statusUserCompanyFilter" onchange="drawStatusUserList()">
+        <option value="">전체</option>
+      </select>
+    </div>
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>이름</th>
+          <th>이메일</th>
+          <th>권한</th>
+          <th>협력 구분</th>
+          <th>업체</th>
+        </tr>
+      </thead>
+      <tbody id="statusUserListBody"></tbody>
+    </table>
+  </div>
+  <!-- 스케줄 목록 판 (읽기 전용, 기간 설정 및 엑셀 다운로드) -->
+  <div id="statusSchedulePane" class="status-pane" style="display:none;">
+    <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+      <label>조회 시작일</label>
+      <input type="date" id="statusQueryStart">
+      <label>조회 종료일</label>
+      <input type="date" id="statusQueryEnd">
+      <button onclick="drawStatusScheduleList()">조회</button>
+    </div>
+    <div class="schedule-list-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>업체</th>
+            <th>엔지니어</th>
+            <th>기간</th>
+            <th>Ship Name</th>
+            <th>IMO 번호</th>
+            <th>Hull 번호</th>
+            <th>지역</th>
+            <th>담당자</th>
+            <th>상세</th>
+            <th style="text-align:left;">서비스 불가 일정</th>
+            <th>수정</th>
+            <th>삭제</th>
+          </tr>
+        </thead>
+        <!-- 상태 섹션에서는 tbody의 id를 statusScheduleListBody 로 변경 -->
+        <tbody id="statusScheduleListBody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;">
+      <button onclick="downloadExcel()">엑셀 다운로드</button>
+    </div>
+  </div>
+  <!-- 변경 히스토리 판 (읽기 전용, 엑셀 다운로드) -->
+  <div id="statusHistoryPane" class="status-pane" style="display:none;">
+    <button onclick="downloadHistoryExcel()" class="excel-download-btn">히스토리 엑셀 다운로드</button>
+  
+    <!-- 히스토리 테이블 컨테이너 -->
+    <div class="history-table-container">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th style="width:80px;">시간</th>
+            <th>사용자</th>
+            <th>변경 전 시작일</th>
+            <th>변경 전 종료일</th>
+            <th>변경 후 시작일</th>
+            <th>변경 후 종료일</th>
+            <th>구분</th>
+            <th>업체</th>
+            <th>엔지니어</th>
+            <th>변경 전 Ship Name</th>
+            <th>변경 후 Ship Name</th>
+            <th>변경 전 IMO No.</th>
+            <th>변경 후 IMO No.</th>
+            <th>변경 전 Hull No.</th>
+            <th>변경 후 Hull No.</th>
+            <th>변경 전 지역</th>
+            <th>변경 후 지역</th>
+            <th>담당자</th>
+          </tr>
+        </thead>
+        <tbody id="statusHistoryBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+
+
+    <!-- (F) 관리자 페이지 -->
+<section id="adminSection">
+  <div class="admin-menu">
+    <button onclick="showAdminPane('userList')">유저 목록</button>
+    <button onclick="showAdminPane('userRegister')">유저 등록</button>
+    <button onclick="showAdminPane('scheduleList')">스케줄 목록</button>
+    <button onclick="showAdminPane('companyColor')">업체 색상 관리</button>
+    <button onclick="showAdminPane('history')">변경 히스토리</button>
+    <button onclick="showAdminPane('accessHistory')">접속 현황</button>
+  </div>
+
+<!-- 수정된 스케줄 테이블 구조 -->
+<div id="adminScheduleListPane" class="admin-pane">
+    <h4>스케줄 목록</h4>
+    <div class="schedule-controls" style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; align-items:center;">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <label>조회 시작일</label>
+            <input type="date" id="adminQueryStart">
+            <label>조회 종료일</label>
+            <input type="date" id="adminQueryEnd">
+            <button onclick="drawScheduleList()" class="admin-btn">조회</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button onclick="addNewScheduleRow()" class="admin-btn" style="background:#27ae60;">
+                ➕ 필드 추가
+            </button>
+            <button onclick="toggleFullscreenTable()" class="admin-btn" id="fullscreenTableBtn">
+                <span id="fullscreenIcon">⛶</span> 전체화면
+            </button>
+            <button onclick="saveScheduleTable()" class="admin-btn" style="background:#27ae60;">
+                💾 변경사항 저장
+            </button>
+        </div>
+    </div>
+    
+    <!-- 리사이징 가능한 테이블 컨테이너 -->
+    <div id="scheduleTableContainer" class="resizable-table-container">
+        <div id="tableWrapper" class="table-wrapper">
+            <table id="editableScheduleTable" class="admin-table editable-table">
+                <thead>
+                    <tr>
+                        <th data-field="eta" class="resizable">ETA</th>
+                        <th data-field="etb" class="resizable">ETB</th>
+                        <th data-field="etd" class="resizable">ETD</th>
+                        <th data-field="regionName" class="resizable">지역</th>
+                        <th data-field="country" class="resizable">국가</th>
+                        <th data-field="imoNo" class="resizable">IMO 번호</th>
+                        <th data-field="hullNo" class="resizable">HULL 번호</th>
+                        <th data-field="shipName" class="resizable">SHIP NAME</th>
+                        <th data-field="managerId" class="resizable">담당자</th>
+                        <th data-field="company" class="resizable">업체</th>
+                        <th data-field="engineer" class="resizable">엔지니어</th>
+                        <th data-field="asNo" class="resizable">AS NO.</th>
+                        <th data-field="asType" class="resizable">AS 구분</th>
+                        <th data-field="startDate" class="resizable">시작일</th>
+                        <th data-field="endDate" class="resizable">종료일</th>
+                        <th data-field="departureDate" class="resizable">방선일</th>
+                        <th data-field="cancelReason" class="resizable">취소 사유</th>
+                        <th data-field="status" class="resizable">상태</th>
+                        <th data-field="details" class="resizable">상세</th>
+                        <th data-field="message" class="resizable">전달사항</th>
+                        <th data-field="unavailable" class="resizable">서비스 불가</th>
+                        <th data-field="action" class="resizable">작업</th>
+                    </tr>
+                </thead>
+                <tbody id="adminScheduleListBody"></tbody>
+            </table>
+        </div>
+    </div>
+    <div style="margin-top:12px; margin-bottom:50px;">
+        <button onclick="downloadExcel()" class="admin-btn">엑셀 다운로드</button>
+        <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(event)"/>
+        <button onclick="document.getElementById('excelFileInput').click()" class="admin-btn">엑셀 업로드</button>
+    </div>
+</div>
+
+      <!-- 유저 목록 -->
+      <div id="adminUserListPane" class="admin-pane">
+        <h4>유저 목록</h4>
+        <div style="margin-bottom:10px;">
+          <label for="userCompanyFilter">업체별 필터: </label>
+          <select id="userCompanyFilter" onchange="drawUserList()">
+            <option value="">전체</option>
+          </select>
+        </div>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="min-width:60px;">이름</th>
+              <th>이메일</th>
+              <th>권한</th>
+              <th>협력 구분</th>
+              <th>업체</th>
+              <th>수정</th>
+              <th>삭제</th>
+            </tr>
+          </thead>
+          <tbody id="adminUserListBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 유저 등록 -->
+      <div id="adminUserRegisterPane" class="admin-pane">
+        <h4>유저 등록</h4>
+        <div class="admin-form-row">
+          <label>권한</label>
+          <select id="adminRegisterRole" onchange="toggleRegisterSubCategory()">
+            <option value="관리자">관리자</option>
+            <option value="본사">본사</option>
+            <option value="협력">협력</option>
+          </select>
+        </div>
+        <!-- 협력 구분 (주요/기타) - 협력 권한일 경우 표시 -->
+        <div class="admin-form-row" id="adminRegisterSubCategoryRow" style="display:none;">
+          <label>협력 구분</label>
+          <select id="adminRegisterSubCategory">
+            <option value="주요">주요</option>
+            <option value="기타" selected>기타</option>
+          </select>
+        </div>
+        <div class="admin-form-row">
+          <label>이름(표시용)</label>
+          <input type="text" id="adminRegisterName" placeholder="예: 홍길동"/>
+        </div>
+        <div class="admin-form-row">
+          <label>이메일</label>
+          <input type="email" id="adminRegisterEmail" placeholder="예: user@example.com"/>
+        </div>
+        <div class="admin-form-row">
+          <label>비밀번호</label>
+          <input type="password" id="adminRegisterPw" placeholder="********"/>
+        </div>
+        <div class="admin-form-row">
+          <label>업체명</label>
+          <input type="text" id="adminRegisterCompany" placeholder="예: 본사, ○○업체 등"/>
+        </div>
+        <button onclick="createUser()">등록하기</button>
+      </div>
+
+      <!-- 업체 색상 관리 -->
+<div id="adminCompanyColorPane" class="admin-pane">
+  <h4>업체 색상 관리</h4>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>업체명</th>
+        <th>기본(normal)</th>
+        <th>취소(cancel)</th>
+        <th>확정(final)</th>
+        <th>불가(unavailable)</th>
+        <th>완료(completed)</th>
+        <th>삭제</th>
+      </tr>
+    </thead>
+    <tbody id="companyColorBody"></tbody>
+  </table>
+  <!-- 색상 지정 입력란들: 업체명 선택, 기본/취소/확정/불가 색상 -->
+  <div class="admin-form-row">
+    <label>업체명 선택</label>
+    <select id="selectCompanyName" onchange="onSelectCompanyNameChange()"></select>
+  </div>
+  <div class="admin-form-row">
+    <label>기본(normal) 색상</label>
+    <input type="color" id="inputCompanyColorNormal" value="#999999"/>
+  </div>
+  <div class="admin-form-row">
+    <label>취소(cancel) 색상</label>
+    <input type="color" id="inputCompanyColorCancel" value="#ff0000"/>
+  </div>
+  <div class="admin-form-row">
+    <label>확정(final) 색상</label>
+    <input type="color" id="inputCompanyColorFinal" value="#00ff00"/>
+  </div>
+  <div class="admin-form-row">
+    <label>불가(unavailable) 색상</label>
+    <input type="color" id="inputCompanyColorUnavailable" value="#cccccc"/>
+  </div>
+  <div class="admin-form-row">
+    <label>완료(completed) 색상</label>
+    <input type="color" id="inputCompanyColorCompleted" value="#3498db"/>
+  </div>
+  <!-- 추가/수정 버튼은 색상 입력란 아래에 위치 -->
+  <button onclick="saveCompanyColor()">추가/수정</button>
+</div>
+
+
+      <!-- 변경 히스토리 -->
+      <div id="adminHistoryPane" class="admin-pane">
+        <h4>변경 히스토리</h4>
+        <div class="admin-form-row">
+          <label>히스토리 최대 개수</label>
+          <input type="number" id="historyLimitInput" style="width:120px;" />
+        </div>
+        <button onclick="setHistoryLimit()">설정 저장</button>
+        <button onclick="downloadHistoryExcel()" class="excel-download-btn">히스토리 엑셀 다운로드</button>
+        
+        <!-- 히스토리 테이블 컨테이너 -->
+        <div class="history-table-container" style="margin-top:10px; clear:both;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width:80px;">시간</th>
+                <th>사용자</th>
+                <th>변경 전 시작일</th>
+                <th>변경 전 종료일</th>
+                <th>변경 후 시작일</th>
+                <th>변경 후 종료일</th>
+                <th>구분</th>
+                <th>업체</th>
+                <th>엔지니어</th>
+                <th>변경 전 Ship Name</th>
+                <th>변경 후 Ship Name</th>
+                <th>변경 전 IMO No.</th>
+                <th>변경 후 IMO No.</th>
+                <th>변경 전 Hull No.</th>
+                <th>변경 후 Hull No.</th>
+                <th>변경 전 지역</th>
+                <th>변경 후 지역</th>
+                <th>담당자</th>
+              </tr>
+            </thead>
+            <tbody id="adminHistoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+<!-- 관리자 페이지: 접속 현황 판 -->
+<div id="adminAccessHistoryPane" class="admin-pane">
+  <h4>접속 현황</h4>
+  
+  <!-- 기간 설정 필터 추가 -->
+  <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+    <label>조회 시작일</label>
+    <input type="date" id="accessHistoryStartDate">
+    <label>조회 종료일</label>
+    <input type="date" id="accessHistoryEndDate">
+    <button onclick="drawAccessHistory()">조회</button>
+  </div>
+  
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>사용자</th>
+        <th>이메일</th>
+        <th>권한</th>
+        <th>업체</th>
+        <th>접속 횟수</th>
+        <th>마지막 접속 시간</th>
+      </tr>
+    </thead>
+    <tbody id="adminAccessHistoryBody"></tbody>
+  </table>
+</div>
+
+
+    </section>
+  </div>
+<footer style="text-align:center; padding:10px; font-size:0.8em; color:#555;">
+  <button onclick="logout()" style="background:#c0392b; color:#fff; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; margin-bottom:8px;">
+    로그아웃
+  </button>
+  <button id="toggleVersionButton" onclick="toggleVersion()" style="background:#2980b9; color:#fff; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; margin-left:10px;">
+    PC 버전
+  </button>
+  <br>
+  서비스 문의 및 개선 사항은 고객지원 서상훈 차장(031-229-1432)에게 문의하세요
+</footer>
+
+
+
+  <!-- 스케줄 등록/수정 모달 -->
+<div id="modal-background" style="display:none;">
+  <div class="modal" id="scheduleModal">
+    <!-- 우측 상단 X 버튼 -->
+    <button class="modal-close" onclick="closeModal()">×</button>
+      <div id="scheduleStatusLabel"></div>
+      <h3>스케줄 등록/수정</h3>
+      <div class="modal-row" id="modalUserRow" style="display:none;">
+        <label>엔지니어(업체)</label>
+        <div style="display:flex; gap:4px; align-items:center;">
+          <select id="modalUserSelect"></select>
+          <button type="button" onclick="addEngineerRow()">+</button>
+        </div>
+      </div>
+      <div id="additionalEngineerRows" style="margin-bottom:8px;"></div>
+<div class="modal-row" id="modalManagerRow" style="display: flex; gap: 10px; flex-wrap: wrap;">
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">본사 담당자</label>
+    <select id="modalManagerSelect" style="width: 100%; box-sizing: border-box; font-size: 0.8em;"></select>
+  </div>
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">AS NO.</label>
+    <input type="text" id="modalAsNo" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+</div>
+
+
+
+      <!-- 시작일/종료일을 한 줄에 표시 -->
+<!-- 시작일/종료일 -->
+<!-- 시작일/종료일 (수정 후) -->
+<div class="modal-row" style="display: flex; flex-wrap: nowrap; gap: 10px;">
+  <div class="date-input-container" style="display: flex; width: 100%; gap: 10px; flex-wrap: nowrap;">
+    <div class="date-input-field" style="flex: 1 1 50%; min-width: 0;">
+      <label style="font-size: 0.8em;">시작일</label>
+      <input type="date" id="modalStartDate" onchange="updateEngineerLists()" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+    </div>
+    <div class="date-input-field" style="flex: 1 1 50%; min-width: 0;">
+      <label style="font-size: 0.8em;">종료일</label>
+      <input type="date" id="modalEndDate" onchange="updateEngineerLists()" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+    </div>
+  </div>
+</div>
+
+
+<!-- ETA, ETB, ETD -->
+<!-- 변경 후: three-date-row 클래스를 추가하여 한 줄 배치 -->
+<div class="modal-row three-date-row">
+  <div class="date-input-field">
+    <label>ETA (도착예정)</label>
+    <input type="date" id="modalETA"/>
+  </div>
+  <div class="date-input-field">
+    <label>ETB (접안예정)</label>
+    <input type="date" id="modalETB"/>
+  </div>
+  <div class="date-input-field">
+    <label>ETD (출항예정)</label>
+    <input type="date" id="modalETD"/>
+  </div>
+</div>
+
+
+<div class="modal-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">IMO No.</label>
+    <input type="text" id="modalIMONo" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">SHIPOWNER</label>
+    <input type="text" id="modalShipOwner" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+</div>
+
+<div class="modal-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">Ship Name</label>
+    <input type="text" id="modalLine" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">Hull No.</label>
+    <input type="text" id="modalHullNo" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+</div>
+
+<div class="modal-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">국가</label>
+    <input type="text" id="modalCountry" placeholder="국가를 입력하세요..." oninput="filterCountryList()" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+  <div style="flex: 1; min-width: 0;">
+    <label style="font-size: 0.8em;">지역</label>
+    <input type="text" id="modalRegion" style="width: 100%; box-sizing: border-box; font-size: 0.8em;">
+  </div>
+</div>
+
+<div class="modal-row" id="countryDropdownContainer" style="display: none;">
+  <ul id="countryDropdown" style="list-style: none; margin: 0; padding: 0; border: 1px solid #ccc; max-height: 150px; overflow-y: auto;"></ul>
+</div>
+
+      <div class="modal-row">
+        <label>작업내용</label>
+        <textarea id="modalDetails" style="width:100%; height:60px;"></textarea>
+      </div>
+      <div class="modal-row">
+        <label>전달사항</label>
+        <textarea id="modalMessage" style="width:100%; height:60px;"></textarea>
+      </div>
+      <div class="modal-row" style="display:flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="modalUnavailable"/>
+        <label for="modalUnavailable" style="margin:0;">서비스 불가 일정</label>
+      </div>
+    
+
+      <div class="modal-row">
+        <label>가용 엔지니어(확인 필요)</label>
+        <div id="availableEngineersList" style="border:1px solid #ccc; padding:4px; height:60px; overflow:auto; font-size:0.8em;"></div>
+      </div>
+<div class="modal-row">
+  <label>배정 완료 엔지니어</label>
+  <div id="assignedEngineersList" style="border:1px solid #ccc; padding:4px; height:60px; overflow:auto; font-size:0.8em;"></div>
+</div>
+
+  <!-- '기타 협력사 포함' 체크박스 (본사/관리자만 보임) -->
+<div class="modal-row" id="includeOtherPartnersRow" style="display:flex; align-items:center;">
+  <input type="checkbox" id="includeOtherPartnersCheckbox" style="margin-right:4px;">
+  <!-- label에 display:inline-block 추가 -->
+  <label for="includeOtherPartnersCheckbox" style="margin:0; display:inline-block;">
+    기타 협력사 포함
+  </label>
+</div>
+
+
+
+      <div class="modal-buttons">
+        <div class="primary-buttons">
+          <button id="btnDeleteSchedule" onclick="deleteSchedule()" style="display:none;background:#c0392b;">삭제</button>
+          <button id="btnSaveOnly" onclick="saveScheduleOnly()" style="background:#3498db;">저장</button>
+          <button id="btnCancelSchedule" onclick="cancelSchedule()" style="display:none;background:#9b59b6;">일정 취소</button>
+          <button id="btnSaveSchedule" onclick="saveSchedule()" style="background:#2980b9;">일정 추가</button>
+          <button id="btnFinalizeSchedule" onclick="finalizeSchedule()" style="display:none;background:#27ae60;">최종 확정</button>
+          <button id="btnCompleteService" onclick="completeService()" style="display:none;background:#3498db;">서비스 완료</button>
+
+        </div>
+        <div class="secondary-buttons">
+          <button id="btnSendEmail" onclick="sendEmailNotification()" style="background:#2980b9;">이메일 발송</button>
+          <button id="btnTimeTable" onclick="openTimeTableModal()" style="background:#2980b9;">타임 테이블</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 타임 테이블 모달 -->
+  <div id="timeTableModalBg" style="display:none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); z-index:1000;">
+    <div class="modal" id="timeTableModal">
+      <h3>타임 테이블 입력</h3>
+      <div id="timeTableContainer">
+        <table id="timeTable" border="1" style="width:100%; border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th>시간</th>
+              <th>작업 내용</th>
+              <th>삭제</th>
+            </tr>
+          </thead>
+          <tbody id="timeTableBody">
+</tbody>
+        </table>
+      </div>
+      <button onclick="addTimeTableRow()">행 추가</button>
+      <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+        <button onclick="downloadTimeTableExcel()">엑셀 다운로드</button>
+        <button onclick="document.getElementById('timeTableFileInput').click()">엑셀 업로드</button>
+        <input type="file" id="timeTableFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadTimeTableExcel(event)">
+        <button onclick="saveTimeTable()">저장</button>
+        <button onclick="closeTimeTableModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 유저 수정 모달 (비밀번호 변경 입력란 제거) -->
+  <div id="modalUserEditBg">
+    <div class="modal" id="userEditModal">
+      <h3>유저 수정/삭제</h3>
+      <div class="modal-row">
+        <label>UID</label>
+        <input type="text" id="userEditUid" disabled/>
+      </div>
+      <div class="modal-row">
+        <label>이름</label>
+        <input type="text" id="userEditName"/>
+      </div>
+      <div class="modal-row">
+        <label>이메일(참고용)</label>
+        <input type="email" id="userEditEmail" readonly/>
+      </div>
+      <div class="modal-row">
+        <label>권한</label>
+        <select id="userEditRole">
+          <option value="관리자">관리자</option>
+          <option value="본사">본사</option>
+          <option value="협력">협력</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label>업체명</label>
+        <input type="text" id="userEditCompany"/>
+      </div>
+      <!-- 협력 구분 (주요/기타) - 협력 계정일 때만 표시 -->
+      <div class="modal-row" id="userEditSubCategoryRow" style="display:none;">
+        <label>협력 구분</label>
+        <select id="userEditSubCategory">
+          <option value="주요">주요</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div class="modal-buttons">
+        <button onclick="closeUserEditModal()">취소</button>
+        <button onclick="deleteUserFromModal()" style="background:#c0392b;">삭제</button>
+        <button onclick="applyUserEdit()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SheetJS + Firebase, Excel 기능 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Firebase App, Database, Auth (compat 버전) -->
+  <script src="https://www.gstatic.com/firebasejs/9.20.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.20.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.20.0/firebase-auth-compat.js"></script>
+
+<script src="main.js?v=1.0.5"></script>
+
+</body>
+</html>
