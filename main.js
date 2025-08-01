@@ -32,6 +32,10 @@ let timeTableData = [];
 let modifiedCells = {}; // 수정된 셀 추적을 위한 객체
 let fullscreenMode = false; // 전체화면 모드 상태 변수
 
+function isAdminRole(role){
+  return role === "관리자" || role === "일정관리자";
+}
+
 /****************************************
  3) 페이지 로드 시 초기 작업
 *****************************************/
@@ -98,7 +102,7 @@ auth.onAuthStateChanged(user => {
           currentUser = userData;
           document.getElementById("login-container").style.display = "none";
           document.getElementById("main-menu").style.display = "flex";
-          document.getElementById("btnAdmin").style.display = (currentUser.role === "관리자") ? "inline-block" : "none";
+          document.getElementById("btnAdmin").style.display = (isAdminRole(currentUser.role)) ? "inline-block" : "none";
           // 본사 권한이면 현황 버튼 표시
           document.getElementById("btnStatus").style.display = (currentUser.role === "본사") ? "inline-block" : "none";
           loadAllData().then(() => { 
@@ -233,7 +237,7 @@ function showSection(sec){
     // 기본으로 유저 목록 표시
     showStatusPane('user');
   } else if(sec === "admin"){
-    if(currentUser.role === "관리자"){
+    if(isAdminRole(currentUser.role)){
       document.getElementById("adminSection").classList.add("active");
       document.getElementById("btnAdmin").classList.add("active");
       showAdminPane("userList");
@@ -257,7 +261,7 @@ function hideAllSections(){
 *****************************************/
 function canAccessSchedule(sch){
   if(!currentUser) return false;
-  if(currentUser.role === "관리자" || currentUser.role === "본사") return true;
+  if(isAdminRole(currentUser.role) || currentUser.role === "본사") return true;
   const schUser = users[sch.userId];
   return schUser ? (schUser.company === currentUser.company) : false;
 }
@@ -675,6 +679,8 @@ function openModal(scheduleId = null, dateStr = null){
   
   // AS No. 필드 초기화 추가
   document.getElementById("modalAsNo").value = "";
+  // AS 구분 필드 초기화 추가
+  document.getElementById("modalAsType").value = "";
   
   // 국가 필드 초기화 추가
   document.getElementById("modalCountry").value = "";
@@ -683,7 +689,7 @@ function openModal(scheduleId = null, dateStr = null){
   document.getElementById("modalUnavailable").onchange = toggleManagerField;
 
   // 1) 권한별 엔지니어/담당자/체크박스 표시
-  if (currentUser.role === "관리자" || currentUser.role === "본사") {
+  if (isAdminRole(currentUser.role) || currentUser.role === "본사") {
     // 관리자/본사: 엔지니어 선택 전체, 본사 담당자 전체, "기타 협력사 포함" 체크박스 보이기
     userRow.style.display = "";
     buildEngineerSelectOptions(sel); // 필터 없음
@@ -735,6 +741,8 @@ function openModal(scheduleId = null, dateStr = null){
     
     // AS No. 값 채우기 추가
     document.getElementById("modalAsNo").value = sch.asNo || "";
+    // AS 구분 값 채우기 추가
+    document.getElementById("modalAsType").value = sch.asType || "";
     
     // 국가 값 채우기 추가
     document.getElementById("modalCountry").value = sch.country || "";
@@ -771,7 +779,7 @@ function openModal(scheduleId = null, dateStr = null){
 
     // 버튼 표시
     btnSave.textContent = "일정 변경";
-    if (currentUser.role === "관리자" || currentUser.role === "본사") {
+    if (isAdminRole(currentUser.role) || currentUser.role === "본사") {
       userRow.style.display = "";
       buildEngineerSelectOptions(sel, sch.userId);
       btnDelete.style.display = "inline-block";
@@ -790,9 +798,9 @@ function openModal(scheduleId = null, dateStr = null){
       // 저장 버튼은 항상 활성화
       btnSave.disabled = false;
       btnSaveOnly.disabled = false;
-      btnCancel.disabled = true;
-      btnFinalize.disabled = true;
-      btnComplete.disabled = true;
+      btnCancel.disabled = false;
+      btnFinalize.disabled = false;
+      btnComplete.disabled = false;
       document.getElementById("btnSendEmail").disabled = false;
     } else {
       btnSave.disabled = false;
@@ -1262,6 +1270,9 @@ function saveSchedule(){
   const workContent = document.getElementById("modalDetails").value.trim();
   const transferMsg = document.getElementById("modalMessage").value.trim();
   const isUnavailable = document.getElementById("modalUnavailable").checked;
+
+  const asNoVal = document.getElementById("modalAsNo").value.trim();
+  const asTypeVal = document.getElementById("modalAsType").value;
   
   // ETA, ETB, ETD 값 가져오기
   const etaVal = document.getElementById("modalETA").value;
@@ -1271,7 +1282,15 @@ function saveSchedule(){
   if(!sDate || !eDate){ alert("시작/종료일을 입력하세요"); return; }
   if(sDate > eDate){ alert("종료일이 시작일보다 빠릅니다."); return; }
   
-  let mainUserId = (document.getElementById("modalUserRow").style.display !== "none") ? document.getElementById("modalUserSelect").value : currentUid;
+  let mainUserId;
+  if(document.getElementById("modalUserRow").style.display !== "none"){
+    mainUserId = document.getElementById("modalUserSelect").value;
+  } else if(editingScheduleId){
+    const idxKeep = schedules.findIndex(x => x.id === editingScheduleId);
+    mainUserId = idxKeep > -1 ? schedules[idxKeep].userId : currentUid;
+  } else {
+    mainUserId = currentUid;
+  }
   const extraContainer = document.getElementById("additionalEngineerRows");
   const extraSelects = extraContainer.querySelectorAll("select");
   
@@ -1297,6 +1316,8 @@ function saveSchedule(){
       schedules[idx].message = transferMsg;
       schedules[idx].unavailable = isUnavailable;
       schedules[idx].managerId = managerId; // 서비스 불가 여부에 따라 결정된 managerId 사용
+      schedules[idx].asNo = asNoVal;
+      schedules[idx].asType = asTypeVal;
       
       // ETA, ETB, ETD 추가
       schedules[idx].eta = etaVal;
@@ -1326,6 +1347,8 @@ function saveSchedule(){
             message: transferMsg,
             unavailable: isUnavailable,
             managerId: managerId, // 서비스 불가 여부에 따라 결정된 managerId 사용
+            asNo: asNoVal,
+            asType: asTypeVal,
             eta: etaVal,
             etb: etbVal,
             etd: etdVal,
@@ -1362,6 +1385,8 @@ function saveSchedule(){
       message: transferMsg,
       unavailable: isUnavailable,
       managerId: managerId, // 서비스 불가 여부에 따라 결정된 managerId 사용
+      asNo: asNoVal,
+      asType: asTypeVal,
       eta: etaVal,
       etb: etbVal,
       etd: etdVal,
@@ -1386,6 +1411,8 @@ function saveSchedule(){
           message: transferMsg,
           unavailable: isUnavailable,
           managerId: managerId, // 서비스 불가 여부에 따라 결정된 managerId 사용
+          asNo: asNoVal,
+          asType: asTypeVal,
           eta: etaVal,
           etb: etbVal,
           etd: etdVal,
@@ -1499,7 +1526,7 @@ function buildManagerSelectOptions(selectEl, selectedValue = null){
   selectEl.innerHTML = "";
   let hasOption = false;
   for(const uid in users){
-    if(users[uid].role === "본사" || users[uid].role === "관리자"){
+    if(users[uid].role === "본사" || isAdminRole(users[uid].role)){
       const opt = document.createElement("option");
       opt.value = uid;
       opt.textContent = users[uid].id || "담당자";
@@ -1927,7 +1954,15 @@ function saveSchedule(){
   if(!sDate || !eDate){ alert("시작/종료일을 입력하세요"); return; }
   if(sDate > eDate){ alert("종료일이 시작일보다 빠릅니다."); return; }
   
-  let mainUserId = (document.getElementById("modalUserRow").style.display !== "none") ? document.getElementById("modalUserSelect").value : currentUid;
+  let mainUserId;
+  if(document.getElementById("modalUserRow").style.display !== "none"){
+    mainUserId = document.getElementById("modalUserSelect").value;
+  } else if(editingScheduleId){
+    const idxKeep = schedules.findIndex(x => x.id === editingScheduleId);
+    mainUserId = idxKeep > -1 ? schedules[idxKeep].userId : currentUid;
+  } else {
+    mainUserId = currentUid;
+  }
   const extraContainer = document.getElementById("additionalEngineerRows");
   const extraSelects = extraContainer.querySelectorAll("select");
   
@@ -2072,8 +2107,23 @@ function downloadExcel() {
     "서비스 불가": "서비스 불가"
   };
 
+  // 조회 기간 필터 적용 (상태 페이지의 기간 필터 활용)
+  let exportSchedules = schedules;
+  const qs = document.getElementById("statusQueryStart");
+  const qe = document.getElementById("statusQueryEnd");
+  if(qs && qe){
+    const startVal = qs.value;
+    const endVal = qe.value;
+    if(startVal || endVal){
+      exportSchedules = schedules.filter(sch =>
+        (!startVal || sch.startDate >= startVal) &&
+        (!endVal || sch.startDate <= endVal)
+      );
+    }
+  }
+
   // exportData 생성 – 헤더를 한글로 지정
-  const exportData = schedules.map(sch => {
+  const exportData = exportSchedules.map(sch => {
     const managerName =
       sch.managerId && users[sch.managerId] ? users[sch.managerId].id : "";
     const engineerName =
@@ -2122,6 +2172,7 @@ function downloadExcel() {
       "지역": sch.regionName || "",
       "국가": sch.country || "",
       "IMO 번호": sch.imoNo || "",
+      "SHIPOWNER": sch.shipOwner || "",
       "HULL 번호": sch.hullNo || "",
       "SHIP NAME": sch.lineName || "",
       "담당자": managerName,
@@ -2149,7 +2200,7 @@ function downloadExcel() {
   // 고정 목록: 상태, 서비스 불가, AS 구분
   const statusList = "일정 등록 대기,일정 등록,일정 변경,일정 취소,일정 확정,서비스 완료,서비스 불가";
   const unavailableList = "네,아니오";
-  const asTypeList = "유상,무상";
+  const asTypeList = "유상,무상,위탁";
 
   // 엔지니어 목록: users 중 협력 계정의 이름 (중복 제거)
   let engineerOptions = [];
@@ -2163,7 +2214,7 @@ function downloadExcel() {
   // 본사 담당자 목록: users 중 본사 또는 관리자 계정의 이름 (중복 제거)
   let managerOptions = [];
   for (const uid in users) {
-    if (users[uid].role === "본사" || users[uid].role === "관리자") {
+    if (users[uid].role === "본사" || isAdminRole(users[uid].role)) {
       managerOptions.push(users[uid].id);
     }
   }
@@ -2250,7 +2301,7 @@ function uploadExcel(event){
       let managerUid = "";
       if (row["담당자"]) {
         for (const uid in users) {
-          if ((users[uid].role === "본사" || users[uid].role === "관리자") && users[uid].id === row["담당자"]) {
+          if ((users[uid].role === "본사" || isAdminRole(users[uid].role)) && users[uid].id === row["담당자"]) {
             managerUid = uid;
             break;
           }
@@ -3240,7 +3291,7 @@ function renderScheduleRows(filtered, tbody) {
     managerSelect.appendChild(emptyOption);
     
     for (const uid in users) {
-      if (users[uid].role === "본사" || users[uid].role === "관리자") {
+      if (users[uid].role === "본사" || isAdminRole(users[uid].role)) {
         const option = document.createElement("option");
         option.value = uid;
         option.textContent = users[uid].id || "담당자";
@@ -3429,7 +3480,7 @@ tr.appendChild(asNoCell);
     asTypeSelect.onchange = function() { trackChange(this); };
     
     // AS 구분 옵션 추가
-    const asOptions = ["", "유상", "무상"];
+    const asOptions = ["", "유상", "무상", "위탁"];
     asOptions.forEach(opt => {
       const option = document.createElement("option");
       option.value = opt;
@@ -4363,6 +4414,39 @@ function openUserEditModal(uid) {
   
   document.getElementById("modalUserEditBg").style.display = "block";
 }
+
+function closeUserEditModal(){
+  document.getElementById("modalUserEditBg").style.display = "none";
+}
+
+function applyUserEdit(){
+  const uid = document.getElementById("userEditUid").value;
+  const name = document.getElementById("userEditName").value.trim();
+  const role = document.getElementById("userEditRole").value;
+  const company = document.getElementById("userEditCompany").value.trim();
+  const subCat = document.getElementById("userEditSubCategory").value;
+  const data = {
+    id: name,
+    role: role,
+    company: company,
+    subCategory: role === "협력" ? subCat : ""
+  };
+  db.ref("users/"+uid).update(data).then(()=>{
+    alert("저장되었습니다.");
+    closeUserEditModal();
+    return loadAllData();
+  }).then(drawUserList);
+}
+
+function deleteUserFromModal(){
+  const uid = document.getElementById("userEditUid").value;
+  if(!confirm("삭제하시겠습니까?")) return;
+  db.ref("users/"+uid).remove().then(()=>{
+    alert("삭제되었습니다.");
+    closeUserEditModal();
+    return loadAllData();
+  }).then(drawUserList);
+}
 function populateUserCompanyFilter() {
   const filterSelect = document.getElementById("userCompanyFilter");
   // 기존 선택 값 기억
@@ -4509,7 +4593,7 @@ function showRecipientSelectPopup(message, callback) {
     emptyOpt.textContent = "-- 선택 --";
     select.appendChild(emptyOpt);
     for (let uid in users) {
-      if(users[uid].role === "본사" || users[uid].role === "관리자"){
+      if(users[uid].role === "본사" || isAdminRole(users[uid].role)){
         let opt = document.createElement("option");
         opt.value = uid;
         opt.textContent = users[uid].email + " (" + users[uid].id + ")";
@@ -4764,6 +4848,33 @@ function toggleRegisterSubCategory() {
   } else {
     row.style.display = "none";
   }
+}
+
+function createUser(){
+  const role = document.getElementById("adminRegisterRole").value;
+  const subCat = document.getElementById("adminRegisterSubCategory").value;
+  const name = document.getElementById("adminRegisterName").value.trim();
+  const email = document.getElementById("adminRegisterEmail").value.trim();
+  const pw = document.getElementById("adminRegisterPw").value;
+  const company = document.getElementById("adminRegisterCompany").value.trim();
+  if(!email || !pw){ alert("이메일과 비밀번호를 입력하세요."); return; }
+  fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,password:pw,returnSecureToken:true})})
+    .then(res=>res.json())
+    .then(data=>{
+      if(data.error) throw new Error(data.error.message);
+      const uid = data.localId;
+      return db.ref('users/'+uid).set({
+        id:name,
+        email:email,
+        role:role,
+        company:company,
+        subCategory: role === '협력' ? subCat : ''
+      });
+    })
+    .then(()=>{ alert('유저 등록 완료'); return loadAllData(); })
+    .then(drawUserList)
+    .catch(err=>alert('등록 실패: '+err.message));
 }
 
 /****************************************
@@ -5162,7 +5273,7 @@ function populateManagerFilters() {
   
   for (const uid in users) {
     // 본사 또는 관리자 권한을 가진 사용자만 추가
-    if (users[uid].role === "본사" || users[uid].role === "관리자") {
+    if (users[uid].role === "본사" || isAdminRole(users[uid].role)) {
       managers.push({
         uid: uid,
         name: users[uid].id || "(이름 없음)",
@@ -5426,6 +5537,7 @@ function saveScheduleOnly() {
 
  // AS No. 값 가져오기 추가
   const asNoVal = document.getElementById("modalAsNo").value.trim();
+  const asTypeVal = document.getElementById("modalAsType").value;
   
   // 국가 값 가져오기 추가
   const countryVal = document.getElementById("modalCountry").value.trim();  
@@ -5446,8 +5558,15 @@ function saveScheduleOnly() {
     return; 
   }
   
-  let mainUserId = (document.getElementById("modalUserRow").style.display !== "none") ? 
-    document.getElementById("modalUserSelect").value : currentUid;
+  let mainUserId;
+  if(document.getElementById("modalUserRow").style.display !== "none"){
+    mainUserId = document.getElementById("modalUserSelect").value;
+  } else if(editingScheduleId){
+    const idxKeep = schedules.findIndex(x => x.id === editingScheduleId);
+    mainUserId = idxKeep > -1 ? schedules[idxKeep].userId : currentUid;
+  } else {
+    mainUserId = currentUid;
+  }
   
   const extraContainer = document.getElementById("additionalEngineerRows");
   const extraSelects = extraContainer.querySelectorAll("select");
@@ -5483,6 +5602,8 @@ function saveScheduleOnly() {
     
       // AS No. 저장 추가
       schedules[idx].asNo = asNoVal;
+      // AS 구분 저장 추가
+      schedules[idx].asType = asTypeVal;
       
       // 국가 저장 추가
       schedules[idx].country = countryVal;
@@ -5515,6 +5636,7 @@ function saveScheduleOnly() {
             unavailable: isUnavailable,
             managerId: managerId,
             asNo: asNoVal,      // AS No. 추가
+            asType: asTypeVal,  // AS 구분 추가
             country: countryVal, // 국가 추가
             eta: etaVal,
             etb: etbVal,
@@ -5556,6 +5678,7 @@ function saveScheduleOnly() {
       unavailable: isUnavailable,
       managerId: managerId,
       asNo: asNoVal,       // AS No. 추가
+      asType: asTypeVal,   // AS 구분 추가
       country: countryVal,  // 국가 추가
       eta: etaVal,
       etb: etbVal,
@@ -5584,6 +5707,7 @@ function saveScheduleOnly() {
           unavailable: isUnavailable,
           managerId: managerId,
           asNo: asNoVal,       // AS No. 추가
+          asType: asTypeVal,   // AS 구분 추가
           country: countryVal,  // 국가 추가
           eta: etaVal,
           etb: etbVal,
